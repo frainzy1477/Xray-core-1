@@ -3,7 +3,10 @@ package dns
 import (
 	"context"
 	"strings"
+	"time"
 
+	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/common/log"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/features/dns"
 	"github.com/xtls/xray-core/features/dns/localdns"
@@ -17,7 +20,8 @@ type LocalNameServer struct {
 const errEmptyResponse = "No address associated with hostname"
 
 // QueryIP implements Server.
-func (s *LocalNameServer) QueryIP(_ context.Context, domain string, _ net.IP, option dns.IPOption, _ bool) (ips []net.IP, err error) {
+func (s *LocalNameServer) QueryIP(ctx context.Context, domain string, _ net.IP, option dns.IPOption, _ bool) (ips []net.IP, err error) {
+	start := time.Now()
 	ips, err = s.client.LookupIP(domain, option)
 
 	if err != nil && strings.HasSuffix(err.Error(), errEmptyResponse) {
@@ -25,7 +29,8 @@ func (s *LocalNameServer) QueryIP(_ context.Context, domain string, _ net.IP, op
 	}
 
 	if len(ips) > 0 {
-		newError("Localhost got answer: ", domain, " -> ", ips).AtInfo().WriteToLog()
+		errors.LogInfo(ctx, "Localhost got answer: ", domain, " -> ", ips)
+		log.Record(&log.DNSLog{Server: s.Name(), Domain: domain, Result: ips, Status: log.DNSQueried, Elapsed: time.Since(start), Error: err})
 	}
 
 	return
@@ -38,7 +43,7 @@ func (s *LocalNameServer) Name() string {
 
 // NewLocalNameServer creates localdns server object for directly lookup in system DNS.
 func NewLocalNameServer() *LocalNameServer {
-	newError("DNS: created localhost client").AtInfo().WriteToLog()
+	errors.LogInfo(context.Background(), "DNS: created localhost client")
 	return &LocalNameServer{
 		client: localdns.New(),
 	}
